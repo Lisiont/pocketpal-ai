@@ -28,6 +28,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@dariyd/react-native-text-recognition": "^2.0.20",
     "@dr.pogodin/react-native-fs": "^2.36.0",
     "@flyerhq/react-native-link-preview": "^1.6.0",
     "@gorhom/bottom-sheet": "^5.2.8",
@@ -52,6 +53,8 @@
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.18",
     "expr-eval": "^2.0.2",
+    "fast-xml-parser": "^5.10.1",
+    "jszip": "^3.10.1",
     "llama.rn": "0.12.7",
     "marked": "^16.4.0",
     "mobx": "^6.15.0",

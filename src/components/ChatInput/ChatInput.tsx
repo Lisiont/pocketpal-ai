@@ -33,7 +33,7 @@ import {chatSessionStore, modelStore, palStore, uiStore} from '../../store';
 
 import {MessageType} from '../../utils/types';
 import {L10nContext, UserContext} from '../../utils';
-import {pickTextDocument, readTextDocument} from '../../utils/importUtils';
+import {pickLocalDocument, readLocalDocument} from '../../utils/documentUtils';
 import {t} from '../../locales';
 
 import {SendButton, StopButton, Menu, VoiceChip} from '..';
@@ -298,30 +298,36 @@ export const ChatInput = observer(
       }
     };
 
-    // Handle selecting a local TXT/MD document
+    // Handle selecting a local document
     const handleSelectDocument = async () => {
       try {
-        const file = await pickTextDocument();
+        const file = await pickLocalDocument();
 
         if (!file) {
           return;
         }
 
-        const content = await readTextDocument(file.uri);
+        const content = await readLocalDocument(file);
 
-        // Prevent extremely large documents from overflowing the model context.
+        if (!content.trim()) {
+          throw new Error('문서에서 읽을 수 있는 텍스트를 찾지 못했습니다.');
+        }
+
+        // Qwen3-4B의 모바일 context를 넘기지 않도록 1차 제한
         const maxChars = 12000;
         const trimmed =
           content.length > maxChars
             ? content.slice(0, maxChars) +
-              '\n\n[문서가 길어 앞부분만 불러왔습니다.]'
+              '\n\n[문서가 길어 앞부분 12,000자만 불러왔습니다.]'
             : content;
 
         const documentPrompt =
-          `[첨부 문서: ${file.name}]\n\n` +
+          `[첨부 문서: ${file.name}]\n` +
+          `[형식: ${file.extension.toUpperCase()}]\n\n` +
           trimmed +
           '\n\n[문서 끝]\n\n' +
-          '위 문서를 기준으로 질문에 답해주세요. 문서에 없는 내용은 추측하지 마세요.';
+          '위 첨부 문서의 내용만 근거로 답해주세요. ' +
+          '문서에 없는 사실은 추측하지 마세요.';
 
         setText(documentPrompt);
         textInputProps?.onChangeText?.(documentPrompt);
@@ -330,7 +336,8 @@ export const ChatInput = observer(
         console.error('Error selecting document:', error);
         Alert.alert(
           '문서 불러오기 실패',
-          error?.message || 'TXT 또는 MD 문서를 불러오지 못했습니다.',
+          error?.message ||
+            'TXT, MD, CSV 또는 DOCX 문서를 불러오지 못했습니다.',
         );
       }
     };
@@ -558,7 +565,7 @@ export const ChatInput = observer(
                     onPress={handleSelectImages}
                   />
                   <Menu.Item
-                    label="Document (TXT / MD)"
+                    label="Document (TXT / MD / CSV / DOCX)"
                     icon="file-document-outline"
                     onPress={handleSelectDocument}
                   />
