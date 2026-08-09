@@ -301,6 +301,11 @@ export const ChatInput = observer(
     // Handle selecting a local document
     const handleSelectDocument = async () => {
       try {
+        // Android may temporarily background the app while the system
+        // document picker is open. Prevent PocketPal from releasing
+        // the currently loaded model during that time.
+        modelStore.disableAutoRelease('document-picker');
+
         const file = await pickLocalDocument();
 
         if (!file) {
@@ -339,6 +344,8 @@ export const ChatInput = observer(
           error?.message ||
             'TXT, MD, CSV 또는 DOCX 문서를 불러오지 못했습니다.',
         );
+      } finally {
+        modelStore.enableAutoRelease('document-picker');
       }
     };
 
