@@ -472,3 +472,55 @@ const importSinglePal = async (pal: ImportedPal): Promise<void> => {
     throw error;
   }
 };
+
+/**
+ * Pick a local text document (.txt or .md)
+ */
+export const pickTextDocument = async (): Promise<{
+  uri: string;
+  name: string;
+} | null> => {
+  try {
+    const res = await pick({
+      type: [types.allFiles],
+    });
+
+    if (!res || res.length === 0) {
+      return null;
+    }
+
+    const file = res[0];
+    const name = file.name || 'document.txt';
+    const lowerName = name.toLowerCase();
+
+    if (!lowerName.endsWith('.txt') && !lowerName.endsWith('.md')) {
+      throw new Error('Only TXT and MD files are supported for now');
+    }
+
+    return {
+      uri: file.uri,
+      name,
+    };
+  } catch (err: any) {
+    if (isErrorWithCode(err)) {
+      if (err.code === errorCodes.OPERATION_CANCELED) {
+        return null;
+      }
+    }
+    throw err;
+  }
+};
+
+/**
+ * Read a local UTF-8 text document
+ */
+export const readTextDocument = async (
+  fileUri: string,
+): Promise<string> => {
+  try {
+    return await RNFS.readFile(fileUri, 'utf8');
+  } catch (error) {
+    console.error('Error reading text document:', error);
+    throw new Error('Failed to read the selected document');
+  }
+};

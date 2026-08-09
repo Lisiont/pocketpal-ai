@@ -33,6 +33,7 @@ import {chatSessionStore, modelStore, palStore, uiStore} from '../../store';
 
 import {MessageType} from '../../utils/types';
 import {L10nContext, UserContext} from '../../utils';
+import {pickTextDocument, readTextDocument} from '../../utils/importUtils';
 import {t} from '../../locales';
 
 import {SendButton, StopButton, Menu, VoiceChip} from '..';
@@ -297,6 +298,43 @@ export const ChatInput = observer(
       }
     };
 
+    // Handle selecting a local TXT/MD document
+    const handleSelectDocument = async () => {
+      try {
+        const file = await pickTextDocument();
+
+        if (!file) {
+          return;
+        }
+
+        const content = await readTextDocument(file.uri);
+
+        // Prevent extremely large documents from overflowing the model context.
+        const maxChars = 12000;
+        const trimmed =
+          content.length > maxChars
+            ? content.slice(0, maxChars) +
+              '\n\n[문서가 길어 앞부분만 불러왔습니다.]'
+            : content;
+
+        const documentPrompt =
+          `[첨부 문서: ${file.name}]\n\n` +
+          trimmed +
+          '\n\n[문서 끝]\n\n' +
+          '위 문서를 기준으로 질문에 답해주세요. 문서에 없는 내용은 추측하지 마세요.';
+
+        setText(documentPrompt);
+        textInputProps?.onChangeText?.(documentPrompt);
+        setShowImageUploadMenu(false);
+      } catch (error: any) {
+        console.error('Error selecting document:', error);
+        Alert.alert(
+          '문서 불러오기 실패',
+          error?.message || 'TXT 또는 MD 문서를 불러오지 못했습니다.',
+        );
+      }
+    };
+
     // Handle selecting images from the gallery
     const handleSelectImages = async () => {
       try {
@@ -362,7 +400,7 @@ export const ChatInput = observer(
     const onSurfaceColor = currentActivePal?.color?.[0] || theme.colors.text;
     const onSurfaceColorVariant = onSurfaceColor + '55'; // for disabled state or placeholder text
     // // Plus button state
-    const isPlusButtonEnabled = !isStreaming && isVisionEnabled;
+    const isPlusButtonEnabled = !isStreaming;
     const plusColor = isPlusButtonEnabled
       ? onSurfaceColor
       : onSurfaceColorVariant;
@@ -518,6 +556,11 @@ export const ChatInput = observer(
                     label={l10n.common?.gallery || 'Gallery'}
                     icon="image"
                     onPress={handleSelectImages}
+                  />
+                  <Menu.Item
+                    label="Document (TXT / MD)"
+                    icon="file-document-outline"
+                    onPress={handleSelectDocument}
                   />
                 </Menu>
               )}
