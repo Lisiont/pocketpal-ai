@@ -543,8 +543,8 @@ export const ChatInput = observer(
           <View style={styles.controlBar}>
             {/* Left Controls */}
             <View style={styles.leftControls}>
-              {/* Plus Button for Image Upload (only for regular chat) */}
-              {showImageUpload && !isVideoCapable && (
+              {/* Plus Button for document/image upload */}
+              {!isVideoCapable && (
                 <Menu
                   visible={showImageUploadMenu}
                   onDismiss={() => setShowImageUploadMenu(false)}
@@ -556,21 +556,25 @@ export const ChatInput = observer(
                       onPress={
                         isPlusButtonEnabled ? handlePlusButtonPress : () => {}
                       }
-                      accessibilityLabel="Add image"
+                      accessibilityLabel="Add attachment"
                       accessibilityRole="button">
                       <PlusIcon width={20} height={20} stroke={plusColor} />
                     </TouchableOpacity>
                   }>
-                  <Menu.Item
-                    label={l10n.camera?.takePhoto || 'Camera'}
-                    icon="camera"
-                    onPress={handleTakePhoto}
-                  />
-                  <Menu.Item
-                    label={l10n.common?.gallery || 'Gallery'}
-                    icon="image"
-                    onPress={handleSelectImages}
-                  />
+                  {showImageUpload && isVisionEnabled && (
+                    <>
+                      <Menu.Item
+                        label={l10n.camera?.takePhoto || 'Camera'}
+                        icon="camera"
+                        onPress={handleTakePhoto}
+                      />
+                      <Menu.Item
+                        label={l10n.common?.gallery || 'Gallery'}
+                        icon="image"
+                        onPress={handleSelectImages}
+                      />
+                    </>
+                  )}
                   <Menu.Item
                     label="Document (TXT / MD / CSV / DOCX)"
                     icon="file-document-outline"
