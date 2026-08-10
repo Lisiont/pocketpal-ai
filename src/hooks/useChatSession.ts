@@ -79,6 +79,15 @@ const prepareCompletion = async ({
   // Check if we have images and if multimodal is enabled
   const hasImages = imageUris && imageUris.length > 0;
 
+  const attachmentContext =
+    typeof message.metadata?.attachmentContext === 'string'
+      ? message.metadata.attachmentContext
+      : '';
+
+  const modelMessageText = attachmentContext
+    ? `${attachmentContext}\n\n[사용자 질문]\n${message.text}`
+    : message.text;
+
   // Create user message content - use array format only for multimodal,
   // string for text-only.
   let userMessageContent: any;
@@ -95,7 +104,7 @@ const prepareCompletion = async ({
       })),
     ];
   } else {
-    userMessageContent = message.text;
+    userMessageContent = modelMessageText;
 
     if (hasImages && !isMultimodalEnabled) {
       uiStore.setChatWarning(
@@ -532,6 +541,7 @@ export const useChatSession = (
       type: 'text',
       imageUris: hasImages ? imageUris : undefined,
       metadata: {
+        ...(message.metadata ?? {}),
         contextId,
         conversationId: conversationIdRef.current,
         copyable: true,

@@ -33,7 +33,11 @@ import {chatSessionStore, modelStore, palStore, uiStore} from '../../store';
 
 import {MessageType} from '../../utils/types';
 import {L10nContext, UserContext} from '../../utils';
-import {pickLocalDocument, readLocalDocument} from '../../utils/documentUtils';
+import {
+  pickLocalDocument,
+  readLocalDocument,
+  type LocalDocument,
+} from '../../utils/documentUtils';
 import {t} from '../../locales';
 
 import {SendButton, StopButton, Menu, VoiceChip} from '..';
@@ -168,6 +172,12 @@ export const ChatInput = observer(
     const selectedImages = defaultImages ?? internalSelectedImages;
     const setSelectedImages =
       onDefaultImagesChange ?? setInternalSelectedImages;
+
+    // Files are displayed as cards while extracted contents remain hidden.
+    const [selectedDocuments, setSelectedDocuments] = React.useState<
+      Array<{file: LocalDocument; content: string}>
+    >([]);
+
     // State for image upload menu
     const [showImageUploadMenu, setShowImageUploadMenu] = React.useState(false);
     // State for showing "model not loaded" helper text
@@ -223,31 +233,66 @@ export const ChatInput = observer(
 
     const handleSend = () => {
       const trimmedValue = value.trim();
-      if (trimmedValue) {
-        // Check if model is loaded before sending
-        if (!hasActiveModel) {
-          // Trigger haptic feedback to indicate the action is blocked
-          ReactNativeHapticFeedback.trigger(
-            'notificationWarning',
-            hapticOptions,
-          );
-          // Show warning helper text
-          setShowModelWarning(true);
-          // Auto-hide after 3 seconds
-          setTimeout(() => setShowModelWarning(false), 3000);
-          return;
-        }
+      const hasDocuments = selectedDocuments.length > 0;
 
-        // Include imageUris in the message object
-        onSendPress({
-          text: trimmedValue,
-          type: 'text',
-          imageUris: selectedImages.length > 0 ? selectedImages : undefined,
-        });
-        setText('');
-        // Clear selected images after sending
-        setSelectedImages([]);
+      if (!trimmedValue && !hasDocuments) {
+        return;
       }
+
+      if (!hasActiveModel) {
+        ReactNativeHapticFeedback.trigger(
+          'notificationWarning',
+          hapticOptions,
+        );
+        setShowModelWarning(true);
+        setTimeout(() => setShowModelWarning(false), 3000);
+        return;
+      }
+
+      const visibleText =
+        trimmedValue || '첨부 파일의 내용을 요약해주세요.';
+
+      let attachmentContext = selectedDocuments
+        .map(
+          ({file, content}, index) =>
+            `[첨부파일 ${index + 1}: ${file.name}]\n` +
+            `[형식: ${file.extension.toUpperCase()}]\n` +
+            `${content}\n` +
+            `[첨부파일 ${index + 1} 끝]`,
+        )
+        .join('\n\n');
+
+      // Qwen3-4B 모바일 context 보호
+      const maxAttachmentChars = 8000;
+
+      if (attachmentContext.length > maxAttachmentChars) {
+        attachmentContext =
+          attachmentContext.slice(0, maxAttachmentChars) +
+          '\n\n[첨부파일 내용이 길어 일부만 모델에 전달되었습니다.]';
+      }
+
+      onSendPress({
+        text: visibleText,
+        type: 'text',
+        imageUris:
+          selectedImages.length > 0
+            ? selectedImages
+            : undefined,
+        metadata:
+          hasDocuments
+            ? {
+                attachments: selectedDocuments.map(({file}) => ({
+                  name: file.name,
+                  extension: file.extension,
+                })),
+                attachmentContext,
+              }
+            : undefined,
+      });
+
+      setText('');
+      setSelectedImages([]);
+      setSelectedDocuments([]);
     };
 
     // Handle plus button press to show image upload menu
@@ -298,12 +343,9 @@ export const ChatInput = observer(
       }
     };
 
-    // Handle selecting a local document
+    // Handle selecting a local file
     const handleSelectDocument = async () => {
       try {
-        // Android may temporarily background the app while the system
-        // document picker is open. Prevent PocketPal from releasing
-        // the currently loaded model during that time.
         modelStore.disableAutoRelease('document-picker');
 
         const file = await pickLocalDocument();
@@ -315,38 +357,44 @@ export const ChatInput = observer(
         const content = await readLocalDocument(file);
 
         if (!content.trim()) {
-          throw new Error('문서에서 읽을 수 있는 텍스트를 찾지 못했습니다.');
+          throw new Error(
+            '파일에서 읽을 수 있는 내용을 찾지 못했습니다.',
+          );
         }
 
-        // Qwen3-4B의 모바일 context를 넘기지 않도록 1차 제한
-        const maxChars = 12000;
-        const trimmed =
-          content.length > maxChars
-            ? content.slice(0, maxChars) +
-              '\n\n[문서가 길어 앞부분 12,000자만 불러왔습니다.]'
+        const maxPerFileChars = 6000;
+
+        const trimmedContent =
+          content.length > maxPerFileChars
+            ? content.slice(0, maxPerFileChars) +
+              '\n[파일 내용 일부가 길이 제한으로 생략되었습니다.]'
             : content;
 
-        const documentPrompt =
-          `[첨부 문서: ${file.name}]\n` +
-          `[형식: ${file.extension.toUpperCase()}]\n\n` +
-          trimmed +
-          '\n\n[문서 끝]\n\n' +
-          '위 첨부 문서의 내용만 근거로 답해주세요. ' +
-          '문서에 없는 사실은 추측하지 마세요.';
+        setSelectedDocuments(current => [
+          ...current,
+          {
+            file,
+            content: trimmedContent,
+          },
+        ]);
 
-        setText(documentPrompt);
-        textInputProps?.onChangeText?.(documentPrompt);
         setShowImageUploadMenu(false);
       } catch (error: any) {
-        console.error('Error selecting document:', error);
+        console.error('Error selecting file:', error);
+
         Alert.alert(
-          '문서 불러오기 실패',
-          error?.message ||
-            'TXT, MD, CSV 또는 DOCX 문서를 불러오지 못했습니다.',
+          '파일 불러오기 실패',
+          error?.message || '선택한 파일을 읽지 못했습니다.',
         );
       } finally {
         modelStore.enableAutoRelease('document-picker');
       }
+    };
+
+    const handleRemoveDocument = (index: number) => {
+      setSelectedDocuments(current =>
+        current.filter((_, i) => i !== index),
+      );
     };
 
     // Handle selecting images from the gallery
@@ -402,8 +450,12 @@ export const ChatInput = observer(
       !isStopVisible &&
       user &&
       !isVideoCapable && // Hide send button for video-capable pals
-      (sendButtonVisibilityMode === 'always' || value.trim());
-    const isSendButtonEnabled = value.trim().length > 0 && hasActiveModel;
+      (sendButtonVisibilityMode === 'always' ||
+        value.trim() ||
+        selectedDocuments.length > 0);
+    const isSendButtonEnabled =
+      (value.trim().length > 0 || selectedDocuments.length > 0) &&
+      hasActiveModel;
     const sendButtonOpacity = isSendButtonEnabled ? 1 : 0.4;
 
     const rotateInterpolate = iconRotation.interpolate({
@@ -484,6 +536,60 @@ export const ChatInput = observer(
                 ))}
               </ScrollView>
             </View>
+          )}
+
+          {/* File Attachment Cards */}
+          {selectedDocuments.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.documentPreviewContainer}
+              contentContainerStyle={styles.documentScrollContent}>
+              {selectedDocuments.map(({file}, index) => (
+                <View
+                  key={`${file.uri}-${index}`}
+                  style={styles.documentCard}>
+
+                  <IconButton
+                    icon={
+                      file.extension === 'xls' ||
+                      file.extension === 'xlsx'
+                        ? 'file-excel-outline'
+                        : file.extension === 'pdf'
+                          ? 'file-pdf-box'
+                          : ['jpg', 'jpeg', 'png', 'webp'].includes(
+                                file.extension,
+                              )
+                            ? 'file-image-outline'
+                            : 'file-document-outline'
+                    }
+                    size={24}
+                    style={styles.documentTypeIcon}
+                    iconColor={theme.colors.onSurface}
+                  />
+
+                  <View style={styles.documentTextContainer}>
+                    <Text
+                      numberOfLines={1}
+                      style={styles.documentName}>
+                      {file.name}
+                    </Text>
+
+                    <Text style={styles.documentType}>
+                      {file.extension.toUpperCase()} · 준비됨
+                    </Text>
+                  </View>
+
+                  <IconButton
+                    icon="close"
+                    size={16}
+                    style={styles.removeDocumentButton}
+                    onPress={() => handleRemoveDocument(index)}
+                    accessibilityLabel={`Remove ${file.name}`}
+                  />
+                </View>
+              ))}
+            </ScrollView>
           )}
 
           {/* Text Input Area (Top Row) */}
@@ -576,7 +682,7 @@ export const ChatInput = observer(
                     </>
                   )}
                   <Menu.Item
-                    label="Document (TXT / MD / CSV / DOCX)"
+                    label="Files"
                     icon="file-document-outline"
                     onPress={handleSelectDocument}
                   />

@@ -142,7 +142,17 @@ export function convertToChatMessages(
       const textMessage = message as MessageType.Text;
       const role: 'assistant' | 'user' =
         message.author.id === assistant.id ? 'assistant' : 'user';
-      const messageText = textMessage.text || '';
+      const visibleMessageText = textMessage.text || '';
+
+      const attachmentContext =
+        typeof textMessage.metadata?.attachmentContext === 'string'
+          ? textMessage.metadata.attachmentContext
+          : '';
+
+      const messageText =
+        role === 'user' && attachmentContext
+          ? `${attachmentContext}\n\n[사용자 질문]\n${visibleMessageText}`
+          : visibleMessageText;
 
       // Multimodal user messages keep their existing shape.
       if (

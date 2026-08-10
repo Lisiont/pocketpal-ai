@@ -162,6 +162,52 @@ export const createStyles = ({
       ...fontStyles.semibold,
       color: theme.colors.inverseOnSurface,
     },
+    // Document attachment card styles
+    documentPreviewContainer: {
+      marginTop: 8,
+      marginBottom: 4,
+      paddingHorizontal: 16,
+    },
+    documentScrollContent: {
+      paddingHorizontal: 4,
+      gap: 8,
+    },
+    documentCard: {
+      width: 230,
+      minHeight: 64,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.outlineVariant,
+      backgroundColor: theme.colors.surfaceVariant,
+    },
+    documentTypeIcon: {
+      margin: 0,
+      marginRight: 4,
+    },
+    documentTextContainer: {
+      flex: 1,
+      paddingHorizontal: 4,
+    },
+    documentName: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.onSurface,
+    },
+    documentType: {
+      fontSize: 11,
+      marginTop: 2,
+      color: theme.colors.onSurfaceVariant,
+    },
+    removeDocumentButton: {
+      margin: 0,
+      width: 28,
+      height: 28,
+    },
+
     // Image preview styles
     imagePreviewContainer: {
       marginVertical: 8,
