@@ -38,6 +38,13 @@ import {
   readLocalDocument,
   type LocalDocument,
 } from '../../utils/documentUtils';
+
+import {
+  chunkDocument,
+  selectRelevantChunks,
+  buildRagContext,
+  type DocumentChunk,
+} from '../../utils/ragUtils';
 import {t} from '../../locales';
 
 import {SendButton, StopButton, Menu, VoiceChip} from '..';
@@ -175,7 +182,7 @@ export const ChatInput = observer(
 
     // Files are displayed as cards while extracted contents remain hidden.
     const [selectedDocuments, setSelectedDocuments] = React.useState<
-      Array<{file: LocalDocument; content: string}>
+      Array<{file: LocalDocument; chunks: DocumentChunk[]}>
     >([]);
 
     // State for image upload menu
@@ -252,24 +259,19 @@ export const ChatInput = observer(
       const visibleText =
         trimmedValue || '첨부 파일의 내용을 요약해주세요.';
 
-      let attachmentContext = selectedDocuments
-        .map(
-          ({file, content}, index) =>
-            `[첨부파일 ${index + 1}: ${file.name}]\n` +
-            `[형식: ${file.extension.toUpperCase()}]\n` +
-            `${content}\n` +
-            `[첨부파일 ${index + 1} 끝]`,
-        )
-        .join('\n\n');
+      const allChunks = selectedDocuments.flatMap(
+        ({chunks}) => chunks,
+      );
 
-      // Qwen3-4B 모바일 context 보호
-      const maxAttachmentChars = 8000;
+      const relevantChunks = selectRelevantChunks(
+        visibleText,
+        allChunks,
+        3,
+        2400,
+      );
 
-      if (attachmentContext.length > maxAttachmentChars) {
-        attachmentContext =
-          attachmentContext.slice(0, maxAttachmentChars) +
-          '\n\n[첨부파일 내용이 길어 일부만 모델에 전달되었습니다.]';
-      }
+      const attachmentContext =
+        buildRagContext(relevantChunks);
 
       onSendPress({
         text: visibleText,
@@ -362,19 +364,22 @@ export const ChatInput = observer(
           );
         }
 
-        const maxPerFileChars = 6000;
+        const chunks = chunkDocument(
+          content,
+          file.name,
+        );
 
-        const trimmedContent =
-          content.length > maxPerFileChars
-            ? content.slice(0, maxPerFileChars) +
-              '\n[파일 내용 일부가 길이 제한으로 생략되었습니다.]'
-            : content;
+        if (chunks.length === 0) {
+          throw new Error(
+            '파일을 검색 가능한 조각으로 나누지 못했습니다.',
+          );
+        }
 
         setSelectedDocuments(current => [
           ...current,
           {
             file,
-            content: trimmedContent,
+            chunks,
           },
         ]);
 
@@ -545,7 +550,7 @@ export const ChatInput = observer(
               showsHorizontalScrollIndicator={false}
               style={styles.documentPreviewContainer}
               contentContainerStyle={styles.documentScrollContent}>
-              {selectedDocuments.map(({file}, index) => (
+              {selectedDocuments.map(({file, chunks}, index) => (
                 <View
                   key={`${file.uri}-${index}`}
                   style={styles.documentCard}>
@@ -576,7 +581,7 @@ export const ChatInput = observer(
                     </Text>
 
                     <Text style={styles.documentType}>
-                      {file.extension.toUpperCase()} · 준비됨
+                      {file.extension.toUpperCase()} · {chunks.length}개 조각 · 준비됨
                     </Text>
                   </View>
 
