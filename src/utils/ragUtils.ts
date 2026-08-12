@@ -286,3 +286,90 @@ export const buildRagContext = (
     })
     .join('\n\n');
 };
+
+export const isDocumentSummaryQuery = (
+  query: string,
+): boolean => {
+  return isSummaryQuery(query);
+};
+
+const compressChunkLocally = (
+  chunk: DocumentChunk,
+  maxChars = 320,
+): DocumentChunk => {
+  const sentences = chunk.text
+    .split(/(?<=[.!?]|다\.)\s+/)
+    .map(sentence => sentence.trim())
+    .filter(Boolean);
+
+  if (sentences.length === 0) {
+    return {
+      ...chunk,
+      text: chunk.text.slice(0, maxChars),
+    };
+  }
+
+  let result = '';
+
+  for (const sentence of sentences) {
+    if ((result + ' ' + sentence).trim().length > maxChars) {
+      break;
+    }
+
+    result = (result + ' ' + sentence).trim();
+  }
+
+  if (!result) {
+    result = chunk.text.slice(0, maxChars);
+  }
+
+  return {
+    ...chunk,
+    text: result,
+  };
+};
+
+export const selectSummaryChunksMobile = (
+  chunks: DocumentChunk[],
+  maxChunks = 7,
+  maxChars = 2400,
+): DocumentChunk[] => {
+  if (chunks.length === 0) {
+    return [];
+  }
+
+  const spread = selectSpreadChunks(
+    chunks,
+    Math.min(maxChunks, chunks.length),
+  );
+
+  const compressed = spread.map(chunk =>
+    compressChunkLocally(chunk, 320),
+  );
+
+  const selected: DocumentChunk[] = [];
+  let usedChars = 0;
+
+  for (const chunk of compressed) {
+    const remaining = maxChars - usedChars;
+
+    if (remaining <= 0) {
+      break;
+    }
+
+    if (chunk.text.length <= remaining) {
+      selected.push(chunk);
+      usedChars += chunk.text.length;
+    } else if (remaining >= 200) {
+      selected.push({
+        ...chunk,
+        text:
+          chunk.text.slice(0, remaining) +
+          '\n[일부 생략]',
+      });
+      break;
+    }
+  }
+
+  return selected;
+};

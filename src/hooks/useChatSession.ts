@@ -84,9 +84,12 @@ const prepareCompletion = async ({
       ? message.metadata.attachmentContext
       : '';
 
+  const disableThinking =
+    message.metadata?.disableThinking === true;
+
   const modelMessageText = attachmentContext
-    ? `${attachmentContext}\n\n[사용자 질문]\n${message.text}`
-    : message.text;
+    ? `${disableThinking ? '/no_think\n' : ''}${attachmentContext}\n\n[사용자 질문]\n${message.text}`
+    : `${disableThinking ? '/no_think\n' : ''}${message.text}`;
 
   // Create user message content - use array format only for multimodal,
   // string for text-only.

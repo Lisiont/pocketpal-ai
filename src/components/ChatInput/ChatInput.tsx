@@ -42,6 +42,8 @@ import {
 import {
   chunkDocument,
   selectRelevantChunks,
+  selectSummaryChunksMobile,
+  isDocumentSummaryQuery,
   buildRagContext,
   type DocumentChunk,
 } from '../../utils/ragUtils';
@@ -263,12 +265,21 @@ export const ChatInput = observer(
         ({chunks}) => chunks,
       );
 
-      const relevantChunks = selectRelevantChunks(
-        visibleText,
-        allChunks,
-        3,
-        2400,
-      );
+      const isSummaryRequest =
+        isDocumentSummaryQuery(visibleText);
+
+      const relevantChunks = isSummaryRequest
+        ? selectSummaryChunksMobile(
+            allChunks,
+            7,
+            2400,
+          )
+        : selectRelevantChunks(
+            visibleText,
+            allChunks,
+            3,
+            2200,
+          );
 
       const attachmentContext =
         buildRagContext(relevantChunks);
@@ -288,6 +299,7 @@ export const ChatInput = observer(
                   extension: file.extension,
                 })),
                 attachmentContext,
+                disableThinking: isSummaryRequest,
               }
             : undefined,
       });
