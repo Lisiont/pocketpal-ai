@@ -99,7 +99,7 @@ const prepareCompletion = async ({
     userMessageContent = [
       {
         type: 'text',
-        text: message.text,
+        text: modelMessageText,
       },
       ...imageUris.map(path => ({
         type: 'image_url',

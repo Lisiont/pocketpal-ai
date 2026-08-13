@@ -271,7 +271,11 @@ export const selectRelevantChunks = (
 export const buildRagContext = (
   chunks: DocumentChunk[],
 ): string => {
-  return chunks
+  if (chunks.length === 0) {
+    return '';
+  }
+
+  const evidence = chunks
     .map((chunk, index) => {
       const location =
         chunk.page !== undefined
@@ -279,12 +283,28 @@ export const buildRagContext = (
           : `${chunk.source}, chunk ${chunk.index + 1}`;
 
       return (
-        `[근거 ${index + 1}: ${location}]\n` +
+        `[근거 ${index + 1}]\n` +
+        `출처: ${location}\n` +
+        `[원문 시작]\n` +
         chunk.text +
-        `\n[근거 ${index + 1} 끝]`
+        `\n[원문 끝]`
       );
     })
     .join('\n\n');
+
+  return (
+    `[문서 근거 시작]\n\n` +
+    evidence +
+    `\n\n[문서 근거 끝]\n\n` +
+    `[문서 답변 규칙]\n` +
+    `1. 위의 문서 근거에 명시된 내용만 사용하세요.\n` +
+    `2. 근거에 없는 정의, 목적, 원인, 의미 또는 기술적 설명을 추측하지 마세요.\n` +
+    `3. 일반 지식이나 사전 학습 지식으로 문서 내용을 보충하지 마세요.\n` +
+    `4. 근거만으로 확인할 수 없는 내용은 "제공된 문서 근거에서 확인할 수 없습니다."라고 답하세요.\n` +
+    `5. 핵심 주장에는 가능한 경우 [p.N] 형식으로 실제 문서 페이지를 표시하세요.\n` +
+    `6. "근거 1", "근거 2" 같은 내부 번호를 페이지 번호처럼 표현하지 마세요.\n` +
+    `7. 원문이 불완전하거나 OCR 오류로 보이면 임의로 복원하지 말고 불확실하다고 밝히세요.`
+  );
 };
 
 export const isDocumentSummaryQuery = (
