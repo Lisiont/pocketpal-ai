@@ -148,14 +148,55 @@ const isSummaryQuery = (query: string): boolean => {
   );
 };
 
+const extractTechnicalIdentifiers = (
+  text: string,
+): string[] => {
+  const normalized = text
+    .toLowerCase()
+    .replace(/[‐-‒–—−]/g, '-');
+
+  const matches =
+    normalized.match(
+      /\b(?:[a-z]{1,10}-?\d+(?:[-.]\d+)*|\d+(?:\.\d+){1,4})\b/gi,
+    ) ?? [];
+
+  return [...new Set(matches.map(item => item.toLowerCase()))];
+};
+
+const compactIdentifier = (value: string): string => {
+  return value.toLowerCase().replace(/[-.\s]/g, '');
+};
+
+const hasTechnicalIdentifier = (
+  text: string,
+  identifier: string,
+): boolean => {
+  const compactTarget = compactIdentifier(identifier);
+
+  if (compactTarget.length < 3) {
+    return false;
+  }
+
+  return extractTechnicalIdentifiers(text).some(
+    item => compactIdentifier(item) === compactTarget,
+  );
+};
+
 const scoreChunk = (
   queryTokens: string[],
+  queryIdentifiers: string[],
   chunk: DocumentChunk,
 ): number => {
   const chunkTokens = tokenize(chunk.text);
   const chunkSet = new Set(chunkTokens);
 
   let score = 0;
+
+  for (const identifier of queryIdentifiers) {
+    if (hasTechnicalIdentifier(chunk.text, identifier)) {
+      score += 100;
+    }
+  }
 
   for (const token of queryTokens) {
     if (chunkSet.has(token)) {
@@ -219,11 +260,17 @@ export const selectRelevantChunks = (
     );
   } else {
     const queryTokens = tokenize(query);
+    const queryIdentifiers =
+      extractTechnicalIdentifiers(query);
 
     const ranked = chunks
       .map(chunk => ({
         chunk,
-        score: scoreChunk(queryTokens, chunk),
+        score: scoreChunk(
+          queryTokens,
+          queryIdentifiers,
+          chunk,
+        ),
       }))
       .sort((a, b) => b.score - a.score);
 
@@ -238,6 +285,20 @@ export const selectRelevantChunks = (
           chunks,
           Math.min(maxChunks, chunks.length),
         );
+
+    console.log(
+      '[RAG] query:',
+      query,
+      'identifiers:',
+      queryIdentifiers,
+      'selected:',
+      candidates.map(chunk => ({
+        source: chunk.source,
+        page: chunk.page,
+        index: chunk.index,
+        preview: chunk.text.slice(0, 120),
+      })),
+    );
   }
 
   const selected: DocumentChunk[] = [];
