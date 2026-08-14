@@ -42,6 +42,7 @@ import {
 import {
   chunkDocument,
   selectRelevantChunks,
+  expandWithAdjacentChunks,
   selectSummaryChunksMobile,
   isDocumentSummaryQuery,
   buildRagContext,
@@ -274,11 +275,15 @@ export const ChatInput = observer(
             7,
             2400,
           )
-        : selectRelevantChunks(
-            visibleText,
+        : expandWithAdjacentChunks(
+            selectRelevantChunks(
+              visibleText,
+              allChunks,
+              2,
+              1800,
+            ),
             allChunks,
-            3,
-            2200,
+            2600,
           );
 
       const attachmentContext =
@@ -299,7 +304,7 @@ export const ChatInput = observer(
                   extension: file.extension,
                 })),
                 attachmentContext,
-                disableThinking: isSummaryRequest,
+                disableThinking: true,
               }
             : undefined,
       });

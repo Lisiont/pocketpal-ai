@@ -454,3 +454,67 @@ export const selectSummaryChunksMobile = (
 
   return selected;
 };
+
+export const expandWithAdjacentChunks = (
+  selected: DocumentChunk[],
+  allChunks: DocumentChunk[],
+  maxChars = 2600,
+): DocumentChunk[] => {
+  if (selected.length === 0) {
+    return [];
+  }
+
+  const candidates: DocumentChunk[] = [];
+  const seen = new Set<string>();
+
+  const add = (chunk?: DocumentChunk) => {
+    if (!chunk || seen.has(chunk.id)) {
+      return;
+    }
+
+    seen.add(chunk.id);
+    candidates.push(chunk);
+  };
+
+  for (const target of selected) {
+    const position = allChunks.findIndex(
+      chunk => chunk.id === target.id,
+    );
+
+    if (position === -1) {
+      add(target);
+      continue;
+    }
+
+    // 정확히 검색된 청크를 우선하고 앞/뒤 문맥을 추가
+    add(allChunks[position]);
+    add(allChunks[position - 1]);
+    add(allChunks[position + 1]);
+  }
+
+  const result: DocumentChunk[] = [];
+  let usedChars = 0;
+
+  for (const chunk of candidates) {
+    const remaining = maxChars - usedChars;
+
+    if (remaining <= 0) {
+      break;
+    }
+
+    if (chunk.text.length <= remaining) {
+      result.push(chunk);
+      usedChars += chunk.text.length;
+    } else if (remaining >= 300) {
+      result.push({
+        ...chunk,
+        text:
+          chunk.text.slice(0, remaining) +
+          '\n[문맥 일부 생략]',
+      });
+      break;
+    }
+  }
+
+  return result;
+};
