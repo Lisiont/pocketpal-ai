@@ -110,6 +110,13 @@ export const TextMessage = ({
   const imageUris = (message as any).imageUris || [];
   const hasImages = imageUris && imageUris.length > 0;
 
+  const retrievalEvidence =
+    !step && Array.isArray((message as any).metadata?.retrievalEvidence)
+      ? (message as any).metadata.retrievalEvidence
+      : [];
+
+  const hasRetrievalEvidence = retrievalEvidence.length > 0;
+
   const handleEmailPress = (email: string) => {
     try {
       Linking.openURL(`mailto:${email}`);
@@ -278,6 +285,72 @@ export const TextMessage = ({
             maxMessageWidth={messageWidth}
             selectable={false}
           />
+        </View>
+      )}
+
+      {!step && hasRetrievalEvidence && (
+        <View
+          style={{
+            marginTop: 8,
+            padding: 10,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: theme.colors.outlineVariant,
+            backgroundColor: theme.colors.surfaceVariant,
+            maxWidth: messageWidth,
+          }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '700',
+              color: theme.colors.onSurface,
+              marginBottom: 6,
+            }}>
+            📄 사용된 문서 근거
+          </Text>
+
+          {retrievalEvidence.map(
+            (
+              evidence: {
+                source?: string;
+                page?: number;
+                index?: number;
+                text?: string;
+              },
+              index: number,
+            ) => (
+              <View
+                key={`${evidence.source ?? 'source'}-${evidence.page ?? evidence.index ?? index}`}
+                style={{
+                  marginTop: index === 0 ? 0 : 8,
+                }}>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '600',
+                    color: theme.colors.onSurface,
+                  }}>
+                  {evidence.source ?? '문서'}
+                  {evidence.page !== undefined
+                    ? ` · p.${evidence.page}`
+                    : evidence.index !== undefined
+                      ? ` · chunk ${evidence.index + 1}`
+                      : ''}
+                </Text>
+
+                <Text
+                  numberOfLines={3}
+                  style={{
+                    marginTop: 3,
+                    fontSize: 11,
+                    lineHeight: 16,
+                    color: theme.colors.onSurfaceVariant,
+                  }}>
+                  {(evidence.text ?? '').trim()}
+                </Text>
+              </View>
+            ),
+          )}
         </View>
       )}
 

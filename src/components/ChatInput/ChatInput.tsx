@@ -304,6 +304,12 @@ export const ChatInput = observer(
                   extension: file.extension,
                 })),
                 attachmentContext,
+                retrievalEvidence: relevantChunks.map(chunk => ({
+                  source: chunk.source,
+                  page: chunk.page,
+                  index: chunk.index,
+                  text: chunk.text,
+                })),
                 disableThinking: true,
               }
             : undefined,
