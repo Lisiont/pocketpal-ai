@@ -283,7 +283,7 @@ export const ChatInput = observer(
               1800,
             ),
             allChunks,
-            2600,
+            1600,
           );
 
       const attachmentContext =
