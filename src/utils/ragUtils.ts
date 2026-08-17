@@ -182,6 +182,112 @@ const hasTechnicalIdentifier = (
   );
 };
 
+export const selectExactTechnicalEvidence = (
+  query: string,
+  chunks: DocumentChunk[],
+  maxChunks = 2,
+): DocumentChunk[] => {
+  const identifiers = extractTechnicalIdentifiers(query);
+
+  if (identifiers.length === 0) {
+    return [];
+  }
+
+  return chunks
+    .filter(chunk =>
+      identifiers.some(identifier =>
+        hasTechnicalIdentifier(chunk.text, identifier),
+      ),
+    )
+    .slice(0, maxChunks);
+};
+
+export const isSimpleTechnicalLookup = (
+  query: string,
+): boolean => {
+  const identifiers = extractTechnicalIdentifiers(query);
+
+  if (identifiers.length === 0) {
+    return false;
+  }
+
+  const lower = query.toLowerCase();
+
+  const complexWords = [
+    '비교',
+    '차이',
+    '분석',
+    '영향',
+    '평가',
+    '장단점',
+    '왜',
+    '원인',
+    'compare',
+    'difference',
+    'analyze',
+    'impact',
+    'evaluate',
+    'why',
+  ];
+
+  if (complexWords.some(word => lower.includes(word))) {
+    return false;
+  }
+
+  const lookupWords = [
+    '뭐',
+    '무엇',
+    '설명',
+    '알려',
+    '내용',
+    '어디',
+    '페이지',
+    '찾아',
+    '시험',
+    '항목',
+    'what',
+    'describe',
+    'where',
+    'find',
+  ];
+
+  return lookupWords.some(word => lower.includes(word));
+};
+
+export const buildFastEvidenceResponse = (
+  query: string,
+  evidence: DocumentChunk[],
+): string | null => {
+  if (
+    !isSimpleTechnicalLookup(query) ||
+    evidence.length === 0
+  ) {
+    return null;
+  }
+
+  const identifiers = extractTechnicalIdentifiers(query);
+
+  const identifier =
+    identifiers.length > 0
+      ? identifiers[0].toUpperCase()
+      : '해당 항목';
+
+  const first = evidence[0];
+
+  const location =
+    first.page !== undefined
+      ? `${first.source} · p.${first.page}`
+      : first.source;
+
+  return (
+    `문서에서 ${identifier} 항목을 찾았습니다.\n\n` +
+    `${location}\n\n` +
+    `아래의 '사용된 문서 근거' 카드에서 ` +
+    `실제로 검색된 원문을 확인할 수 있습니다.\n` +
+    `원문에 명시되지 않은 의미나 목적은 자동으로 추론하지 않았습니다.`
+  );
+};
+
 const scoreChunk = (
   queryTokens: string[],
   queryIdentifiers: string[],

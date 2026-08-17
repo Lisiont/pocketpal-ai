@@ -552,6 +552,31 @@ export const useChatSession = (
       },
     };
     await addMessage(textMessage);
+
+    const fastEvidenceResponse =
+      typeof message.metadata?.fastEvidenceResponse === 'string'
+        ? message.metadata.fastEvidenceResponse.trim()
+        : '';
+
+    if (fastEvidenceResponse) {
+      const fastMessage: MessageType.Text = {
+        author: assistant,
+        createdAt: Date.now(),
+        id: randId(),
+        text: fastEvidenceResponse,
+        type: 'text',
+        metadata: {
+          contextId,
+          conversationId: conversationIdRef.current,
+          copyable: true,
+          fastEvidence: true,
+        },
+      };
+
+      await addMessage(fastMessage);
+      return;
+    }
+
     modelStore.setInferencing(true);
     modelStore.setIsStreaming(false);
     chatSessionStore.setIsGenerating(true);

@@ -42,6 +42,8 @@ import {
 import {
   chunkDocument,
   selectRelevantChunks,
+  selectExactTechnicalEvidence,
+  buildFastEvidenceResponse,
   expandWithAdjacentChunks,
   selectSummaryChunksMobile,
   isDocumentSummaryQuery,
@@ -286,6 +288,26 @@ export const ChatInput = observer(
             1600,
           );
 
+      const exactTechnicalEvidence =
+        !isSummaryRequest
+          ? selectExactTechnicalEvidence(
+              visibleText,
+              allChunks,
+              2,
+            )
+          : [];
+
+      const fastEvidenceResponse =
+        buildFastEvidenceResponse(
+          visibleText,
+          exactTechnicalEvidence,
+        );
+
+      const evidenceForDisplay =
+        fastEvidenceResponse
+          ? exactTechnicalEvidence
+          : relevantChunks;
+
       const attachmentContext =
         buildRagContext(relevantChunks);
 
@@ -304,12 +326,14 @@ export const ChatInput = observer(
                   extension: file.extension,
                 })),
                 attachmentContext,
-                retrievalEvidence: relevantChunks.map(chunk => ({
+                retrievalEvidence: evidenceForDisplay.map(chunk => ({
                   source: chunk.source,
                   page: chunk.page,
                   index: chunk.index,
                   text: chunk.text,
                 })),
+                fastEvidenceResponse:
+                  fastEvidenceResponse ?? undefined,
                 disableThinking: true,
               }
             : undefined,
