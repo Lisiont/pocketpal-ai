@@ -182,6 +182,48 @@ const hasTechnicalIdentifier = (
   );
 };
 
+const technicalEvidenceQuality = (
+  chunk: DocumentChunk,
+): number => {
+  const text = chunk.text.trim();
+  const identifiers = extractTechnicalIdentifiers(text);
+
+  let score = 0;
+
+  // 본문처럼 충분한 설명이 있는 청크 우대
+  if (text.length >= 600) {
+    score += 30;
+  } else if (text.length >= 350) {
+    score += 20;
+  } else if (text.length >= 180) {
+    score += 5;
+  } else {
+    score -= 20;
+  }
+
+  // 문장형 설명이 있을수록 본문일 가능성 증가
+  const sentenceMarks =
+    text.match(/[.!?]/g)?.length ?? 0;
+
+  score += Math.min(sentenceMarks * 2, 16);
+
+  // 한 청크에 기술 식별자가 지나치게 많으면
+  // 목차/색인일 가능성이 있으므로 감점
+  if (identifiers.length >= 5) {
+    score -= Math.min(
+      45,
+      (identifiers.length - 4) * 7,
+    );
+  }
+
+  // 점선 + 페이지 번호 형태의 전형적인 목차 감점
+  if (/\.{3,}\s*\d+/m.test(text)) {
+    score -= 40;
+  }
+
+  return score;
+};
+
 export const selectExactTechnicalEvidence = (
   query: string,
   chunks: DocumentChunk[],
@@ -193,13 +235,38 @@ export const selectExactTechnicalEvidence = (
     return [];
   }
 
-  return chunks
-    .filter(chunk =>
-      identifiers.some(identifier =>
-        hasTechnicalIdentifier(chunk.text, identifier),
-      ),
-    )
-    .slice(0, maxChunks);
+  const selected: DocumentChunk[] = [];
+  const seen = new Set<string>();
+
+  // 식별자별로 가장 본문다운 청크 하나씩 선택
+  for (const identifier of identifiers) {
+    const candidates = chunks
+      .filter(chunk =>
+        hasTechnicalIdentifier(
+          chunk.text,
+          identifier,
+        ),
+      )
+      .map(chunk => ({
+        chunk,
+        quality:
+          technicalEvidenceQuality(chunk),
+      }))
+      .sort((a, b) => b.quality - a.quality);
+
+    const best = candidates[0]?.chunk;
+
+    if (best && !seen.has(best.id)) {
+      seen.add(best.id);
+      selected.push(best);
+    }
+
+    if (selected.length >= maxChunks) {
+      break;
+    }
+  }
+
+  return selected;
 };
 
 export const isSimpleTechnicalLookup = (
@@ -258,19 +325,53 @@ export const buildFastEvidenceResponse = (
   query: string,
   evidence: DocumentChunk[],
 ): string | null => {
+  const identifiers =
+    extractTechnicalIdentifiers(query);
+
   if (
-    !isSimpleTechnicalLookup(query) ||
+    identifiers.length === 0 ||
     evidence.length === 0
   ) {
     return null;
   }
 
-  const identifiers = extractTechnicalIdentifiers(query);
+  const lower = query.toLowerCase();
+
+  const comparisonWords = [
+    '비교',
+    '차이',
+    '분석',
+    'compare',
+    'difference',
+    'analyze',
+  ];
+
+  const isComparison =
+    identifiers.length >= 2 &&
+    comparisonWords.some(word =>
+      lower.includes(word),
+    );
+
+  if (isComparison) {
+    const names = identifiers
+      .map(item => item.toUpperCase())
+      .join(' / ');
+
+    return (
+      `문서에서 ${names} 항목의 본문 근거를 각각 찾았습니다.\n\n` +
+      `아래의 '사용된 문서 근거' 카드에서 ` +
+      `각 항목의 실제 원문과 페이지를 확인할 수 있습니다.\n\n` +
+      `현재 로컬 빠른 모드에서는 문서에 없는 의미를 ` +
+      `임의로 추론하지 않기 위해 자동 비교 해석은 생략했습니다.`
+    );
+  }
+
+  if (!isSimpleTechnicalLookup(query)) {
+    return null;
+  }
 
   const identifier =
-    identifiers.length > 0
-      ? identifiers[0].toUpperCase()
-      : '해당 항목';
+    identifiers[0].toUpperCase();
 
   const first = evidence[0];
 
@@ -315,6 +416,8 @@ const scoreChunk = (
 
     score += Math.min(occurrences, 4);
   }
+
+  score += technicalEvidenceQuality(chunk);
 
   return score;
 };
