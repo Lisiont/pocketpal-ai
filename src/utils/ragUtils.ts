@@ -182,6 +182,46 @@ const hasTechnicalIdentifier = (
   );
 };
 
+const looksLikeTableOfContents = (
+  text: string,
+): boolean => {
+  const lines = text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return false;
+  }
+
+  // 예:
+  // E-15 Reverse polarity ........ 55
+  // 5.15 Reverse polarity ........ 55
+  const dottedPageLines = lines.filter(line =>
+    /\.{3,}\s*\d+\s*$/.test(line),
+  ).length;
+
+  if (dottedPageLines >= 1) {
+    return true;
+  }
+
+  // PDF 추출 과정에서 점선이 사라지는 경우도 대비.
+  // 여러 줄이 제목 + 마지막 페이지 번호 형태면
+  // 목차일 가능성이 높음.
+  const trailingPageLines = lines.filter(line =>
+    /\S.+\s\d{1,4}\s*$/.test(line),
+  ).length;
+
+  if (
+    lines.length >= 4 &&
+    trailingPageLines / lines.length >= 0.5
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 const technicalEvidenceQuality = (
   chunk: DocumentChunk,
 ): number => {
@@ -249,10 +289,19 @@ export const selectExactTechnicalEvidence = (
       )
       .map(chunk => ({
         chunk,
+        isToc:
+          looksLikeTableOfContents(chunk.text),
         quality:
           technicalEvidenceQuality(chunk),
       }))
-      .sort((a, b) => b.quality - a.quality);
+      .sort((a, b) => {
+        // 명확한 목차보다 실제 본문을 항상 우선한다.
+        if (a.isToc !== b.isToc) {
+          return a.isToc ? 1 : -1;
+        }
+
+        return b.quality - a.quality;
+      });
 
     const best = candidates[0]?.chunk;
 
