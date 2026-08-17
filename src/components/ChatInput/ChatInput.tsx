@@ -341,7 +341,9 @@ export const ChatInput = observer(
 
       setText('');
       setSelectedImages([]);
-      setSelectedDocuments([]);
+
+      // Keep attached documents available for follow-up questions.
+      // The user can explicitly remove a document with the X button.
     };
 
     // Handle plus button press to show image upload menu
