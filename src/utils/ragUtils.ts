@@ -222,6 +222,115 @@ const looksLikeTableOfContents = (
   return false;
 };
 
+const extractTocTarget = (
+  chunk: DocumentChunk,
+  identifier: string,
+): {title: string; page?: number} | null => {
+  const lines = chunk.text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  const compactTarget = compactIdentifier(identifier);
+
+  for (const line of lines) {
+    if (!hasTechnicalIdentifier(line, identifier)) {
+      continue;
+    }
+
+    const normalized = line
+      .replace(/[‐-‒–—−]/g, '-')
+      .replace(/\.{3,}/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const pageMatch = normalized.match(/\s(\d{1,4})\s*$/);
+    const page = pageMatch ? Number(pageMatch[1]) : undefined;
+
+    const withoutPage = pageMatch
+      ? normalized.slice(0, pageMatch.index).trim()
+      : normalized;
+
+    const idPattern = new RegExp(
+      identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      'i',
+    );
+
+    let title = withoutPage.replace(idPattern, '').trim();
+
+    if (!title) {
+      const tokens = withoutPage.split(/\s+/);
+      const filtered = tokens.filter(
+        token => compactIdentifier(token) !== compactTarget,
+      );
+      title = filtered.join(' ').trim();
+    }
+
+    if (title) {
+      return {title, page};
+    }
+  }
+
+  return null;
+};
+
+const findBodyFromToc = (
+  tocChunk: DocumentChunk,
+  identifier: string,
+  allChunks: DocumentChunk[],
+): DocumentChunk | null => {
+  const target = extractTocTarget(
+    tocChunk,
+    identifier,
+  );
+
+  if (!target) {
+    return null;
+  }
+
+  const normalizedTitle = target.title.toLowerCase();
+
+  const nearby = target.page !== undefined
+    ? allChunks.filter(chunk =>
+        chunk.page !== undefined &&
+        Math.abs(chunk.page - target.page!) <= 4,
+      )
+    : allChunks;
+
+  const candidates = nearby
+    .filter(chunk => !looksLikeTableOfContents(chunk.text))
+    .map(chunk => {
+      const lower = chunk.text.toLowerCase();
+
+      let score = technicalEvidenceQuality(chunk);
+
+      if (
+        normalizedTitle.length >= 4 &&
+        lower.includes(normalizedTitle)
+      ) {
+        score += 120;
+      }
+
+      if (hasTechnicalIdentifier(chunk.text, identifier)) {
+        score += 40;
+      }
+
+      if (
+        target.page !== undefined &&
+        chunk.page !== undefined
+      ) {
+        score -= Math.abs(chunk.page - target.page) * 5;
+      }
+
+      return {chunk, score};
+    })
+    .sort((a, b) => b.score - a.score);
+
+  return candidates[0]?.score > 0
+    ? candidates[0].chunk
+    : null;
+};
+
 const technicalEvidenceQuality = (
   chunk: DocumentChunk,
 ): number => {
@@ -278,7 +387,6 @@ export const selectExactTechnicalEvidence = (
   const selected: DocumentChunk[] = [];
   const seen = new Set<string>();
 
-  // 식별자별로 가장 본문다운 청크 하나씩 선택
   for (const identifier of identifiers) {
     const candidates = chunks
       .filter(chunk =>
@@ -295,7 +403,6 @@ export const selectExactTechnicalEvidence = (
           technicalEvidenceQuality(chunk),
       }))
       .sort((a, b) => {
-        // 명확한 목차보다 실제 본문을 항상 우선한다.
         if (a.isToc !== b.isToc) {
           return a.isToc ? 1 : -1;
         }
@@ -303,7 +410,24 @@ export const selectExactTechnicalEvidence = (
         return b.quality - a.quality;
       });
 
-    const best = candidates[0]?.chunk;
+    let best = candidates[0]?.chunk;
+
+    // 식별자가 목차에서만 잡히는 경우:
+    // 목차의 제목/페이지 정보를 이용해 실제 본문으로 재탐색
+    if (
+      best &&
+      looksLikeTableOfContents(best.text)
+    ) {
+      const redirected = findBodyFromToc(
+        best,
+        identifier,
+        chunks,
+      );
+
+      if (redirected) {
+        best = redirected;
+      }
+    }
 
     if (best && !seen.has(best.id)) {
       seen.add(best.id);
